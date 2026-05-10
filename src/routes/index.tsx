@@ -45,7 +45,7 @@ function Dashboard() {
 
   return (
     <main className="min-h-screen p-5 md:p-10 max-w-[1200px] mx-auto space-y-8">
-      <ConnectionBar {...sock} />
+      <ConnectionBar {...sock} send={sock.send} />
 
       {sock.error && (
         <div className="panel border-destructive/30 p-3 text-xs text-destructive text-center">

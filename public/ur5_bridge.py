@@ -203,6 +203,7 @@ async def telemetry_loop(bridge, ws, hz):
                     "runtime_state":rtde.getRuntimeState(),
                     "robot_connected": True,
                     "robot_host": bridge.robot,
+                    "control_enabled": bridge.ctrl is not None,
                 }
                 await ws.send(json.dumps(payload))
             except Exception as e:

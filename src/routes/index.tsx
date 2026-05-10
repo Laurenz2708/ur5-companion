@@ -37,6 +37,7 @@ function Dashboard() {
   const sock = useRtdeSocket();
   const d = sock.data;
   const live = sock.state === "open";
+  const robotReady = live && (sock.bridgeStatus?.robotConnected ?? true);
   const speedMag = d?.tcp_speed
     ? Math.hypot(d.tcp_speed[0], d.tcp_speed[1], d.tcp_speed[2])
     : 0;
@@ -57,7 +58,9 @@ function Dashboard() {
       {/* Status pills */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Robot">
-          <span className="text-base font-semibold">{d?.robot_mode ?? "—"}</span>
+          <span className="text-base font-semibold">
+            {d?.robot_mode ?? sock.bridgeStatus?.robotState ?? "—"}
+          </span>
         </Stat>
         <Stat label="Safety">
           <span className={`text-base font-semibold ${safetyTone(d?.safety_mode)}`}>
@@ -140,13 +143,13 @@ function Dashboard() {
 
         {/* Control panel */}
         <section className="lg:col-span-2">
-          <ControlPanel send={sock.send} enabled={live} />
+          <ControlPanel send={sock.send} enabled={robotReady} />
         </section>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-6">
-        <GestureControl send={sock.send} enabled={live} />
-        <CommandStatus send={sock.send} enabled={live} lastAck={sock.lastAck} />
+        <GestureControl send={sock.send} enabled={robotReady} />
+        <CommandStatus send={sock.send} enabled={robotReady} lastAck={sock.lastAck} />
       </div>
 
       <footer className="text-center text-xs text-muted-foreground py-2">

@@ -18,6 +18,13 @@ export type Telemetry = {
 
 export type ConnState = "idle" | "connecting" | "open" | "closed" | "error";
 
+export type Ack = {
+  ok: boolean;
+  cmd?: string;
+  error?: string;
+  t: number;
+};
+
 const DEFAULT_URL =
   typeof window !== "undefined"
     ? localStorage.getItem("ur5_ws_url") || "ws://localhost:8765"
@@ -29,6 +36,7 @@ export function useRtdeSocket() {
   const [data, setData] = useState<Telemetry | null>(null);
   const [hz, setHz] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [lastAck, setLastAck] = useState<Ack | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const tickRef = useRef<{ count: number; last: number }>({ count: 0, last: performance.now() });
 
@@ -58,8 +66,17 @@ export function useRtdeSocket() {
       };
       ws.onmessage = (ev) => {
         try {
-          const msg = JSON.parse(ev.data) as Telemetry;
-          setData(msg);
+          const msg = JSON.parse(ev.data);
+          if (msg && msg.type === "ack") {
+            setLastAck({
+              ok: !!msg.ok,
+              cmd: msg.cmd,
+              error: msg.error,
+              t: Date.now(),
+            });
+            return;
+          }
+          setData(msg as Telemetry);
           const now = performance.now();
           tickRef.current.count++;
           if (now - tickRef.current.last >= 1000) {
@@ -88,5 +105,5 @@ export function useRtdeSocket() {
 
   useEffect(() => () => wsRef.current?.close(), []);
 
-  return { url, setUrl, state, data, hz, error, connect, disconnect, send };
+  return { url, setUrl, state, data, hz, error, lastAck, connect, disconnect, send };
 }

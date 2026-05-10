@@ -183,27 +183,20 @@ async def main():
                    help="Disable Control interface (telemetry only)")
     args = p.parse_args()
 
-    print(f"[bridge] RTDE receive -> {args.robot}")
-    rtde = RTDEReceiveInterface(args.robot)
-    ctrl = None
-    if not args.readonly:
-        print(f"[bridge] RTDE control -> {args.robot}")
-        ctrl = RTDEControlInterface(args.robot)
+    bridge = RtdeBridge(args.robot, readonly=args.readonly)
     print(f"[bridge] ws://0.0.0.0:{args.port}")
 
     async def handler(ws):
         print(f"[bridge] client connected: {ws.remote_address}")
-        producer = asyncio.create_task(telemetry_loop(rtde, ws, args.hz))
+        await ws.send(json.dumps(bridge.status_payload()))
+        producer = asyncio.create_task(telemetry_loop(bridge, ws, args.hz))
         try:
             async for raw in ws:
                 try:
                     cmd = json.loads(raw)
                 except Exception:
                     continue
-                if ctrl is None:
-                    await ws.send(json.dumps({"type":"ack","ok":False,"error":"readonly mode"}))
-                    continue
-                await handle_command(ctrl, rtde, cmd, ws)
+                await handle_command(bridge, cmd, ws)
         finally:
             producer.cancel()
             print("[bridge] client disconnected")

@@ -140,6 +140,7 @@ async def handle_command(bridge, cmd, ws):
       {"cmd":"home", "speed":0.5}
       {"cmd":"jog_joint", "joint":0..5, "delta":<rad>, "speed":0.5}
       {"cmd":"jog_tcp",   "axis":"x|y|z|rx|ry|rz", "delta":<m or rad>, "speed":0.25}
+      {"cmd":"speed_tcp", "xd":[vx,vy,vz,wx,wy,wz], "accel":0.5}
       {"cmd":"set_do", "pin":0..7, "value":true|false}
     """
     op = cmd.get("cmd")
@@ -171,6 +172,16 @@ async def handle_command(bridge, cmd, ws):
             idx = {"x":0,"y":1,"z":2,"rx":3,"ry":4,"rz":5}[axis]
             pose = list(rtde.getActualTCPPose()); pose[idx] += d
             ctrl.moveL(pose, float(cmd.get("speed", 0.25)), 0.5)
+        elif op == "speed_tcp":
+            xd = list(cmd.get("xd", [0,0,0,0,0,0]))
+            while len(xd) < 6: xd.append(0.0)
+            xd = [float(v) for v in xd[:6]]
+            accel = float(cmd.get("accel", 0.5))
+            if all(abs(v) < 1e-6 for v in xd):
+                ctrl.speedStop(accel)
+            else:
+                # 0.5s watchdog — if no new speed_tcp arrives the robot stops.
+                ctrl.speedL(xd, accel, 0.5)
         elif op == "set_do":
             ctrl.setStandardDigitalOut(int(cmd["pin"]), bool(cmd["value"]))
         else:

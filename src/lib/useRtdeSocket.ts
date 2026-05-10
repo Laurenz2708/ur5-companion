@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 
 export type Telemetry = {
+  type?: "telemetry";
   t: number;
   tcp_pose: number[];
   tcp_speed: number[];
@@ -14,6 +15,18 @@ export type Telemetry = {
   digital_in: number;
   digital_out: number;
   runtime_state: number;
+  robot_connected?: boolean;
+  robot_host?: string;
+};
+
+export type BridgeStatus = {
+  robotConnected: boolean;
+  robotHost?: string;
+  robotState: "connected" | "connecting" | "disconnected" | string;
+  robotError?: string | null;
+  readonly?: boolean;
+  controlEnabled?: boolean;
+  t?: number;
 };
 
 export type ConnState = "idle" | "connecting" | "open" | "closed" | "error";
@@ -37,6 +50,7 @@ export function useRtdeSocket() {
   const [hz, setHz] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [lastAck, setLastAck] = useState<Ack | null>(null);
+  const [bridgeStatus, setBridgeStatus] = useState<BridgeStatus | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const tickRef = useRef<{ count: number; last: number }>({ count: 0, last: performance.now() });
 
@@ -76,6 +90,28 @@ export function useRtdeSocket() {
             });
             return;
           }
+          if (msg && msg.type === "status") {
+            setBridgeStatus({
+              robotConnected: !!msg.robot_connected,
+              robotHost: msg.robot_host,
+              robotState: msg.robot_state || "disconnected",
+              robotError: msg.robot_error,
+              readonly: msg.readonly,
+              controlEnabled: msg.control_enabled,
+              t: msg.t,
+            });
+            return;
+          }
+          if (msg && msg.type === "telemetry") {
+            setBridgeStatus({
+              robotConnected: msg.robot_connected ?? true,
+              robotHost: msg.robot_host,
+              robotState: "connected",
+              robotError: null,
+              controlEnabled: true,
+              t: msg.t,
+            });
+          }
           setData(msg as Telemetry);
           const now = performance.now();
           tickRef.current.count++;
@@ -105,5 +141,5 @@ export function useRtdeSocket() {
 
   useEffect(() => () => wsRef.current?.close(), []);
 
-  return { url, setUrl, state, data, hz, error, lastAck, connect, disconnect, send };
+  return { url, setUrl, state, data, hz, error, lastAck, bridgeStatus, connect, disconnect, send };
 }

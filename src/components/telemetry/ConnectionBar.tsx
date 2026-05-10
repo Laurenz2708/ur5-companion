@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { BridgeStatus, ConnState } from "@/lib/useRtdeSocket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +22,7 @@ export function ConnectionBar({
   bridgeStatus,
   connect,
   disconnect,
+  send,
 }: {
   url: string;
   setUrl: (u: string) => void;
@@ -30,8 +32,10 @@ export function ConnectionBar({
   bridgeStatus: BridgeStatus | null;
   connect: () => void;
   disconnect: () => void;
+  send: (msg: Record<string, unknown>) => boolean;
 }) {
   const [draft, setDraft] = useState(url);
+  const [pulling, setPulling] = useState(false);
   const meta = STATE_META[state];
   const live = state === "open";
 
@@ -106,6 +110,26 @@ export function ConnectionBar({
           title="Open URsim PolyScope in a new tab"
         >
           Open simulator
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="rounded-xl whitespace-nowrap"
+          disabled={!live || pulling}
+          onClick={() => {
+            setPulling(true);
+            const ok = send({ cmd: "git_pull" });
+            if (!ok) {
+              toast.error("Bridge not connected");
+              setPulling(false);
+              return;
+            }
+            toast.message("git pull…");
+            setTimeout(() => setPulling(false), 4000);
+          }}
+          title="Run 'git pull' on the bridge host"
+        >
+          {pulling ? "Pulling…" : "Git pull"}
         </Button>
       </div>
     </header>

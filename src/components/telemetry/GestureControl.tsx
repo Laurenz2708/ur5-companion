@@ -11,9 +11,10 @@ type Props = {
   enabled: boolean;
 };
 
-const STEP_M = 0.02; // 2 cm per command
-const SEND_INTERVAL_MS = 250;
-const SPEED = 0.25;
+const SPEED_MS = 0.05; // 5 cm/s for thumb up/down on Z
+const ACCEL = 0.4;
+const SPEED_REFRESH_MS = 200;   // re-send speed_tcp at this rate (watchdog 0.5s)
+const LOST_TIMEOUT_MS = 250;    // stop if no qualifying gesture this long
 const HOME_COOLDOWN_MS = 3000;
 
 export function GestureControl({ send, enabled }: Props) {
@@ -23,6 +24,9 @@ export function GestureControl({ send, enabled }: Props) {
   const rafRef = useRef<number | null>(null);
   const lastSentRef = useRef(0);
   const lastHomeRef = useRef(0);
+  const lastDetectRef = useRef(0);
+  const currentDirRef = useRef<0 | 1 | -1>(0);
+  const watchdogRef = useRef<number | null>(null);
 
   const [active, setActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -80,6 +84,11 @@ export function GestureControl({ send, enabled }: Props) {
     setActive(false);
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
     rafRef.current = null;
+    if (watchdogRef.current) {
+      window.clearInterval(watchdogRef.current);
+      watchdogRef.current = null;
+    }
+    stopMotion();
     const v = videoRef.current;
     const stream = v?.srcObject as MediaStream | null;
     stream?.getTracks().forEach((t) => t.stop());
@@ -92,6 +101,15 @@ export function GestureControl({ send, enabled }: Props) {
     const video = videoRef.current;
     const recognizer = recognizerRef.current;
     if (!video || !recognizer) return;
+
+    // Watchdog: if no thumb up/down seen recently, stop the robot.
+    if (watchdogRef.current) window.clearInterval(watchdogRef.current);
+    watchdogRef.current = window.setInterval(() => {
+      if (currentDirRef.current === 0) return;
+      if (performance.now() - lastDetectRef.current > LOST_TIMEOUT_MS) {
+        stopMotion();
+      }
+    }, 80);
 
     const tick = () => {
       if (!videoRef.current || !recognizerRef.current) return;
@@ -109,6 +127,32 @@ export function GestureControl({ send, enabled }: Props) {
       rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
+  }
+
+  function setDirection(dir: 0 | 1 | -1) {
+    if (!enabled) return;
+    const now = performance.now();
+    if (dir === currentDirRef.current) {
+      // Refresh periodically so the 0.5s RTDE watchdog doesn't trigger.
+      if (dir !== 0 && now - lastSentRef.current >= SPEED_REFRESH_MS) {
+        send({ cmd: "speed_tcp", xd: [0, 0, dir * SPEED_MS, 0, 0, 0], accel: ACCEL });
+        lastSentRef.current = now;
+      }
+      return;
+    }
+    currentDirRef.current = dir;
+    if (dir === 0) {
+      send({ cmd: "speed_tcp", xd: [0, 0, 0, 0, 0, 0], accel: ACCEL });
+    } else {
+      send({ cmd: "speed_tcp", xd: [0, 0, dir * SPEED_MS, 0, 0, 0], accel: ACCEL });
+    }
+    lastSentRef.current = now;
+  }
+
+  function stopMotion() {
+    if (currentDirRef.current === 0) return;
+    currentDirRef.current = 0;
+    send({ cmd: "speed_tcp", xd: [0, 0, 0, 0, 0, 0], accel: ACCEL });
   }
 
   function drawOverlay(result: GestureRecognizerResult | null) {
@@ -141,36 +185,37 @@ export function GestureControl({ send, enabled }: Props) {
     if (!top) {
       setGesture("—");
       setScore(0);
+      // No hand detected at all → make sure we stop.
+      // (Watchdog will also catch this, but stop early for responsiveness.)
+      if (currentDirRef.current !== 0) stopMotion();
       return;
     }
     setGesture(top.categoryName);
     setScore(top.score);
 
     if (!enabled) return;
-    if (top.score < 0.6) return;
-    if (now - lastSentRef.current < SEND_INTERVAL_MS) return;
 
-    let delta = 0;
-    if (top.categoryName === "Open_Palm") {
-      if (now - lastHomeRef.current < HOME_COOLDOWN_MS) return;
-      const ok = send({ cmd: "home", speed: 0.5 });
-      if (ok) {
-        lastHomeRef.current = now;
-        lastSentRef.current = now;
-      }
+    if (top.score < 0.6) {
+      if (currentDirRef.current !== 0) stopMotion();
       return;
     }
-    if (top.categoryName === "Thumb_Up") delta = STEP_M;
-    else if (top.categoryName === "Thumb_Down") delta = -STEP_M;
-    else return;
 
-    const ok = send({
-      cmd: "jog_tcp",
-      axis: "z",
-      delta,
-      speed: SPEED,
-    });
-    if (ok) lastSentRef.current = now;
+    if (top.categoryName === "Open_Palm") {
+      if (currentDirRef.current !== 0) stopMotion();
+      if (now - lastHomeRef.current < HOME_COOLDOWN_MS) return;
+      if (send({ cmd: "home", speed: 0.5 })) lastHomeRef.current = now;
+      return;
+    }
+
+    if (top.categoryName === "Thumb_Up") {
+      lastDetectRef.current = now;
+      setDirection(1);
+    } else if (top.categoryName === "Thumb_Down") {
+      lastDetectRef.current = now;
+      setDirection(-1);
+    } else {
+      if (currentDirRef.current !== 0) stopMotion();
+    }
   }
 
   return (

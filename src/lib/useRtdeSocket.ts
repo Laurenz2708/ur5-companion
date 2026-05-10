@@ -108,7 +108,7 @@ export function useRtdeSocket() {
               robotHost: msg.robot_host,
               robotState: "connected",
               robotError: null,
-              controlEnabled: true,
+              controlEnabled: msg.control_enabled ?? true,
               t: msg.t,
             });
           }

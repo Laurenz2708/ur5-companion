@@ -35,10 +35,26 @@ class RtdeBridge:
         self.state = "disconnected"
         self.last_error = "waiting for first connection attempt"
         self.retry_after = 0.0
+        self.ctrl_retry_after = 0.0
         self._lock = asyncio.Lock()
 
     async def ensure_connected(self):
         if self.rtde is not None:
+            # Receive is up — try to (re)build control on demand.
+            if (
+                self.ctrl is None
+                and not self.readonly
+                and time.time() >= self.ctrl_retry_after
+            ):
+                try:
+                    print(f"[bridge] RTDE control (retry) -> {self.robot}")
+                    self.ctrl = RTDEControlInterface(self.robot)
+                    self.last_error = None
+                except Exception as ce:
+                    self.ctrl = None
+                    self.ctrl_retry_after = time.time() + 1.5
+                    self.last_error = f"control unavailable: {ce}"
+                    print(f"[bridge] control retry failed: {ce}")
             return True
         now = time.time()
         if now < self.retry_after:
@@ -65,6 +81,8 @@ class RtdeBridge:
                         self.last_error = f"control unavailable: {ce}"
                 self.rtde = rtde
                 self.ctrl = ctrl
+                if ctrl is None and not self.readonly:
+                    self.ctrl_retry_after = time.time() + 1.5
                 self.state = "connected"
                 print(f"[bridge] robot connected: {self.robot}")
                 return True
@@ -83,6 +101,7 @@ class RtdeBridge:
         self.state = "disconnected"
         self.last_error = reason
         self.retry_after = time.time() + 1.0
+        self.ctrl_retry_after = 0.0
 
     def status_payload(self):
         return {
@@ -190,10 +209,10 @@ async def handle_command(bridge, cmd, ws):
         await ws.send(json.dumps({"type":"ack","ok":True,"cmd":op}))
     except Exception as e:
         # A failed command should NOT tear down the receive stream — that
-        # froze the live preview after a safety stop. Just drop control;
-        # telemetry keeps flowing and reconnects when the operator clears
-        # the stop on the pendant.
+        # froze the live preview after a safety stop. Drop control and let
+        # ensure_connected() rebuild it on the next command attempt.
         bridge.ctrl = None
+        bridge.ctrl_retry_after = time.time() + 0.5
         bridge.last_error = str(e)
         await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":str(e)}))
 

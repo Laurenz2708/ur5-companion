@@ -308,6 +308,8 @@ async def handle_command(bridge, cmd, ws):
             accel = float(cmd.get("accel", 0.5))
             if all(abs(v) < 1e-6 for v in xd):
                 ctrl.speedStop(accel)
+            elif BYPASS_MOTION_CONSTRAINTS:
+                ctrl.speedL(xd, accel, 0.5)
             else:
                 # Look ahead ~0.4 s along the requested velocity and refuse
                 # if the predicted pose is unreachable / unsafe.

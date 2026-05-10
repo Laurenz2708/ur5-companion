@@ -245,11 +245,19 @@ async def handle_command(bridge, cmd, ws):
         elif op == "jog_joint":
             j = int(cmd["joint"]); d = float(cmd["delta"])
             q = list(rtde.getActualQ()); q[j] += d
+            ok, reason = _validate_joints(q, ctrl)
+            if not ok:
+                await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+                return
             ctrl.moveJ(q, float(cmd.get("speed", 0.5)), 0.5)
         elif op == "jog_tcp":
             axis = cmd["axis"]; d = float(cmd["delta"])
             idx = {"x":0,"y":1,"z":2,"rx":3,"ry":4,"rz":5}[axis]
             pose = list(rtde.getActualTCPPose()); pose[idx] += d
+            ok, reason = _validate_pose(pose, ctrl, list(rtde.getActualQ()))
+            if not ok:
+                await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+                return
             ctrl.moveL(pose, float(cmd.get("speed", 0.25)), 0.5)
         elif op == "speed_tcp":
             xd = list(cmd.get("xd", [0,0,0,0,0,0]))
@@ -259,6 +267,16 @@ async def handle_command(bridge, cmd, ws):
             if all(abs(v) < 1e-6 for v in xd):
                 ctrl.speedStop(accel)
             else:
+                # Look ahead ~0.4 s along the requested velocity and refuse
+                # if the predicted pose is unreachable / unsafe.
+                pose_now = list(rtde.getActualTCPPose())
+                target = [pose_now[i] + xd[i] * 0.4 for i in range(6)]
+                ok, reason = _validate_pose(target, ctrl, list(rtde.getActualQ()))
+                if not ok:
+                    try: ctrl.speedStop(accel)
+                    except Exception: pass
+                    await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+                    return
                 # 0.5s watchdog — if no new speed_tcp arrives the robot stops.
                 ctrl.speedL(xd, accel, 0.5)
         elif op == "set_do":

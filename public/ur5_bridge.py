@@ -29,9 +29,11 @@ HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 # --- Workspace safety envelope (base frame, meters) -------------------------
 # UR5 nominal reach is ~0.85 m. We stay well inside that and forbid the TCP
 # from going below the table or behind the base mount.
-REACH_MAX = 0.82   # max distance from base origin to TCP
-REACH_MIN = 0.18   # keep tool away from the column / self-collision area
-Z_MIN     = 0.05   # never below the mounting surface
+# Coordinates are in the UR base frame. z=0 is the mounting flange, NOT the
+# floor — the TCP is regularly below that (e.g. at the default home pose).
+REACH_MAX = 0.85   # max distance from base origin to TCP
+REACH_MIN = 0.13   # keep tool away from the column / self-collision area
+Z_MIN     = -0.30  # how far below the base flange the TCP may go (table)
 Z_MAX     = 1.00
 # Joint soft limits (rad). Stay clear of the natural mechanical extremes.
 Q_LIMITS = [
@@ -54,7 +56,9 @@ def _validate_pose(pose, ctrl=None, qnear=None):
     if z < Z_MIN: return False, f"z={z:.3f} below floor ({Z_MIN})"
     if z > Z_MAX: return False, f"z={z:.3f} above ceiling ({Z_MAX})"
     if r > REACH_MAX: return False, f"out of reach ({r:.3f} m > {REACH_MAX})"
-    if r_xy < REACH_MIN and z < 0.30:
+    # Self-collision guard: tool must not enter the cylinder around the
+    # column. Only enforced ABOVE the flange where the column actually is.
+    if r_xy < REACH_MIN and z > 0.05:
         return False, "too close to base column (self-collision risk)"
     # Ask the controller for an IK solution if available.
     if ctrl is not None:

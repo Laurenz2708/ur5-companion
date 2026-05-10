@@ -5,6 +5,7 @@ import { ControlPanel } from "@/components/telemetry/ControlPanel";
 import { GestureControl } from "@/components/telemetry/GestureControl";
 import { CommandStatus } from "@/components/telemetry/CommandStatus";
 import { ToolHeadPreview } from "@/components/telemetry/ToolHeadPreview";
+import { ArmVisualization } from "@/components/telemetry/ArmVisualization";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -79,6 +80,7 @@ function Dashboard() {
       <div className="grid lg:grid-cols-5 gap-6">
         {/* Live telemetry */}
         <section className="lg:col-span-3 space-y-6">
+          <ArmVisualization jointQ={d?.joint_q} tcp={d?.tcp_pose} live={live} />
           <ToolHeadPreview pose={d?.tcp_pose} live={live} />
           <div className="panel p-6">
             <div className="flex items-baseline justify-between mb-5">

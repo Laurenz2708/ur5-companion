@@ -14,6 +14,7 @@ type Props = {
 const STEP_M = 0.02; // 2 cm per command
 const SEND_INTERVAL_MS = 250;
 const SPEED = 0.25;
+const HOME_COOLDOWN_MS = 3000;
 
 export function GestureControl({ send, enabled }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -21,6 +22,7 @@ export function GestureControl({ send, enabled }: Props) {
   const recognizerRef = useRef<GestureRecognizer | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastSentRef = useRef(0);
+  const lastHomeRef = useRef(0);
 
   const [active, setActive] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -149,6 +151,15 @@ export function GestureControl({ send, enabled }: Props) {
     if (now - lastSentRef.current < SEND_INTERVAL_MS) return;
 
     let delta = 0;
+    if (top.categoryName === "Open_Palm") {
+      if (now - lastHomeRef.current < HOME_COOLDOWN_MS) return;
+      const ok = send({ cmd: "home", speed: 0.5 });
+      if (ok) {
+        lastHomeRef.current = now;
+        lastSentRef.current = now;
+      }
+      return;
+    }
     if (top.categoryName === "Thumb_Up") delta = STEP_M;
     else if (top.categoryName === "Thumb_Down") delta = -STEP_M;
     else return;
@@ -167,7 +178,7 @@ export function GestureControl({ send, enabled }: Props) {
       <div className="flex items-baseline justify-between">
         <h2 className="text-base font-semibold tracking-tight">Gesture control</h2>
         <span className="text-xs text-muted-foreground">
-          👍 up · 👎 down
+          👍 up · 👎 down · ✋ home
         </span>
       </div>
 

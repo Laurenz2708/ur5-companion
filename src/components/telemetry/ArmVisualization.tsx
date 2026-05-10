@@ -1,58 +1,54 @@
 import { useMemo } from "react";
 
 /**
- * UR5 DH parameters (meters).
- * https://www.universal-robots.com/articles/ur/application-installation/dh-parameters-for-calculations-of-kinematics-and-dynamics/
+ * UR5 DH parameters (meters). Standard convention from Universal Robots.
+ * d, a, alpha per joint i (theta = q_i).
  */
-const D1 = 0.089159;
-const A2 = -0.42500;
-const A3 = -0.39225;
-const D4 = 0.10915;
-const D5 = 0.09465;
-const D6 = 0.0823;
+const DH = [
+  { a: 0.0,      d: 0.089159, alpha:  Math.PI / 2 },
+  { a: -0.42500, d: 0.0,      alpha:  0           },
+  { a: -0.39225, d: 0.0,      alpha:  0           },
+  { a: 0.0,      d: 0.10915,  alpha:  Math.PI / 2 },
+  { a: 0.0,      d: 0.09465,  alpha: -Math.PI / 2 },
+  { a: 0.0,      d: 0.0823,   alpha:  0           },
+] as const;
 
 type V3 = [number, number, number];
+type Mat4 = number[]; // row-major 4x4
 
-/**
- * Approximate joint pivot positions in the robot base frame.
- * Good enough for a live visualization — uses the planar arm geometry
- * rotated by the base (J1) angle.
- */
+function ident(): Mat4 {
+  return [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1];
+}
+function mul(A: Mat4, B: Mat4): Mat4 {
+  const C = new Array(16).fill(0) as Mat4;
+  for (let i = 0; i < 4; i++)
+    for (let j = 0; j < 4; j++)
+      for (let k = 0; k < 4; k++)
+        C[i*4+j] += A[i*4+k] * B[k*4+j];
+  return C;
+}
+function dhMatrix(theta: number, d: number, a: number, alpha: number): Mat4 {
+  const ct = Math.cos(theta), st = Math.sin(theta);
+  const ca = Math.cos(alpha), sa = Math.sin(alpha);
+  return [
+    ct, -st*ca,  st*sa, a*ct,
+    st,  ct*ca, -ct*sa, a*st,
+    0,   sa,     ca,    d,
+    0,   0,      0,     1,
+  ];
+}
+function origin(M: Mat4): V3 { return [M[3], M[7], M[11]]; }
+
+/** Joint origins p0..p6 (base, shoulder, upper-arm tip, forearm tip, wrist1, wrist2, tcp/wrist3). */
 function forwardKinematics(q: number[]): V3[] {
-  const q1 = q[0] ?? 0;
-  const q2 = q[1] ?? 0;
-  const q3 = q[2] ?? 0;
-  const q4 = q[3] ?? 0;
-
-  const c1 = Math.cos(q1), s1 = Math.sin(q1);
-
-  // Planar coords (radial r, vertical z).
-  const r0 = 0,        z0 = 0;
-  const r1 = 0,        z1 = D1;                                  // shoulder
-  const r2 = A2 * Math.cos(q2),                z2 = z1 + A2 * Math.sin(q2);     // elbow
-  const r3 = r2 + A3 * Math.cos(q2 + q3),      z3 = z2 + A3 * Math.sin(q2 + q3); // wrist1
-  // Wrist offset perpendicular to the plane (D4) and small wrist segment (D5).
-  const r4 = r3,                               z4 = z3 - D5;                     // wrist2
-  const r5 = r4,                               z5 = z4;                           // wrist3
-  // Tool length D6 along the (approx) tool z; for viz drop straight down further.
-  const rt = r5,                               zt = z5 - D6 * Math.cos(q4);
-
-  // Wrist sideways offset along the plane normal.
-  const sideOffset = D4;
-
-  // Lift to 3D using J1 base rotation. The wrist offset is along the plane
-  // normal (perpendicular to r-axis): (-s1, c1).
-  const toXY = (r: number, off: number): [number, number] => [r * c1 - off * s1, r * s1 + off * c1];
-
-  const p0: V3 = [0, 0, z0];
-  const p1: V3 = [...toXY(r1, 0), z1];
-  const p2: V3 = [...toXY(r2, 0), z2];
-  const p3: V3 = [...toXY(r3, 0), z3];
-  const p4: V3 = [...toXY(r4, sideOffset), z4];
-  const p5: V3 = [...toXY(r5, sideOffset), z5];
-  const pt: V3 = [...toXY(rt, sideOffset), zt];
-
-  return [p0, p1, p2, p3, p4, p5, pt];
+  let T: Mat4 = ident();
+  const points: V3[] = [origin(T)];
+  for (let i = 0; i < 6; i++) {
+    const { a, d, alpha } = DH[i];
+    T = mul(T, dhMatrix(q[i] ?? 0, d, a, alpha));
+    points.push(origin(T));
+  }
+  return points;
 }
 
 type Props = {
@@ -62,15 +58,17 @@ type Props = {
 };
 
 export function ArmVisualization({ jointQ, tcp, live }: Props) {
-  const joints = useMemo(() => forwardKinematics(jointQ ?? [0, -1.5708, 0, -1.5708, 0, 0]), [jointQ]);
-  // Override the last point with the actual TCP from telemetry if available
-  // (more accurate than our simplified wrist chain).
+  const points = useMemo(
+    () => forwardKinematics(jointQ ?? [0, -1.5708, 0, -1.5708, 0, 0]),
+    [jointQ],
+  );
+  // Replace last point with TCP from telemetry if available.
   const display = useMemo(() => {
-    if (!tcp || tcp.length < 3) return joints;
-    const out = joints.slice();
+    if (!tcp || tcp.length < 3) return points;
+    const out = points.slice();
     out[out.length - 1] = [tcp[0], tcp[1], tcp[2]];
     return out;
-  }, [joints, tcp]);
+  }, [points, tcp]);
 
   return (
     <div className="panel p-6">
@@ -80,15 +78,26 @@ export function ArmVisualization({ jointQ, tcp, live }: Props) {
           {live ? "live" : "offline"}
         </span>
       </div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <ProjectionView label="Side  (radial → · Z ↑)" points={display} mode="side" />
-        <ProjectionView label="Top  (X → · Y ↑)" points={display} mode="top" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <ArmView label="Side  ·  radial → / Z ↑" points={display} mode="side" />
+        <ArmView label="Top  ·  X → / Y ↑" points={display} mode="top" />
       </div>
     </div>
   );
 }
 
-function ProjectionView({
+const SEGMENT_COLORS = [
+  "hsl(var(--primary))",            // base → shoulder
+  "hsl(var(--primary) / 0.85)",     // shoulder → upper arm
+  "hsl(var(--primary) / 0.7)",      // upper arm → forearm
+  "hsl(var(--primary) / 0.6)",      // forearm → wrist1
+  "hsl(var(--primary) / 0.5)",      // wrist1 → wrist2
+  "hsl(var(--primary) / 0.4)",      // wrist2 → tcp
+];
+
+const JOINT_LABELS = ["Base", "J1", "J2", "J3", "J4", "J5", "TCP"];
+
+function ArmView({
   label,
   points,
   mode,
@@ -97,77 +106,116 @@ function ProjectionView({
   points: V3[];
   mode: "side" | "top";
 }) {
-  const W = 280, H = 220, PAD = 12;
-  const reach = 1.0; // meters shown on each side
+  const W = 360, H = 280, PAD = 16;
+  const reach = 1.0;
 
-  // Map world meters to svg pixels.
-  const projected = points.map(([x, y, z]) => {
-    if (mode === "top") return [x, y] as [number, number];
-    // Side view: radial distance vs height. Sign keeps direction relative to base.
-    const r = Math.hypot(x, y) * Math.sign(x || 1);
-    return [r, z] as [number, number];
+  const projected: [number, number][] = points.map(([x, y, z]) => {
+    if (mode === "top") return [x, y];
+    const r = Math.hypot(x, y) * (x >= 0 ? 1 : -1);
+    return [r, z];
   });
 
   const minU = -reach, maxU = reach;
-  const minV = mode === "side" ? -0.1 : -reach;
-  const maxV = mode === "side" ? 1.2 : reach;
+  const minV = mode === "side" ? -0.05 : -reach;
+  const maxV = mode === "side" ? 1.15 : reach;
 
   const px = (u: number) => PAD + ((u - minU) / (maxU - minU)) * (W - 2 * PAD);
-  const py = (v: number) => H - PAD - ((v - minV) / (maxV - minV)) * (H - 2 * PAD);
+  const py = (u: number) => H - PAD - ((u - minV) / (maxV - minV)) * (H - 2 * PAD);
 
-  const path = projected.map(([u, v], i) => `${i === 0 ? "M" : "L"} ${px(u).toFixed(1)} ${py(v).toFixed(1)}`).join(" ");
-  const tcpPoint = projected[projected.length - 1];
+  const tcp = projected[projected.length - 1];
 
   return (
     <div className="rounded-2xl bg-secondary/60 p-3">
       <div className="text-[10px] text-muted-foreground mb-2">{label}</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto block">
         {/* frame */}
-        <rect x={PAD} y={PAD} width={W - 2 * PAD} height={H - 2 * PAD} rx={8} fill="none" stroke="hsl(var(--border))" strokeOpacity={0.4} />
-        {/* origin axes */}
-        <g stroke="hsl(var(--primary))" strokeOpacity={0.35} strokeDasharray="2 3">
-          <line x1={px(0)} y1={PAD} x2={px(0)} y2={H - PAD} />
-          <line x1={PAD} y1={py(0)} x2={W - PAD} y2={py(0)} />
-        </g>
-        {/* ground floor (side view only) */}
-        {mode === "side" && (
-          <line
-            x1={PAD}
-            y1={py(0)}
-            x2={W - PAD}
-            y2={py(0)}
-            stroke="hsl(var(--muted-foreground))"
-            strokeOpacity={0.5}
-            strokeWidth={1}
-          />
-        )}
-        {/* arm chain */}
-        <path
-          d={path}
-          fill="none"
-          stroke="hsl(var(--primary))"
-          strokeWidth={4}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          style={{ transition: "d 120ms linear" }}
-        />
-        {/* joint pivots */}
-        {projected.slice(0, -1).map(([u, v], i) => (
-          <circle
-            key={i}
-            cx={px(u)}
-            cy={py(v)}
-            r={i === 0 ? 6 : 4}
-            fill="hsl(var(--background))"
-            stroke="hsl(var(--primary))"
-            strokeWidth={2}
-            style={{ transition: "cx 120ms linear, cy 120ms linear" }}
-          />
+        <rect x={PAD} y={PAD} width={W - 2*PAD} height={H - 2*PAD} rx={10} fill="none" stroke="hsl(var(--border))" strokeOpacity={0.4} />
+        {/* grid */}
+        {[0.25, 0.5, 0.75].map((f) => (
+          <g key={f} stroke="hsl(var(--border))" strokeOpacity={0.2}>
+            <line x1={PAD + (W-2*PAD)*f} y1={PAD} x2={PAD + (W-2*PAD)*f} y2={H-PAD} />
+            <line x1={PAD} y1={PAD + (H-2*PAD)*f} x2={W-PAD} y2={PAD + (H-2*PAD)*f} />
+          </g>
         ))}
-        {/* TCP */}
-        <g style={{ transition: "transform 120ms linear" }}>
-          <circle cx={px(tcpPoint[0])} cy={py(tcpPoint[1])} r={10} fill="hsl(var(--primary))" fillOpacity={0.18} />
-          <circle cx={px(tcpPoint[0])} cy={py(tcpPoint[1])} r={4} fill="hsl(var(--primary))" />
+        {/* origin axes */}
+        <g stroke="hsl(var(--primary))" strokeOpacity={0.3} strokeDasharray="2 4">
+          <line x1={px(0)} y1={PAD} x2={px(0)} y2={H-PAD} />
+          <line x1={PAD} y1={py(0)} x2={W-PAD} y2={py(0)} />
+        </g>
+
+        {/* ground floor (side view) */}
+        {mode === "side" && (
+          <>
+            <line x1={PAD} y1={py(0)} x2={W-PAD} y2={py(0)} stroke="hsl(var(--muted-foreground))" strokeOpacity={0.6} strokeWidth={1.5} />
+            {/* base mount */}
+            <rect
+              x={px(-0.08)}
+              y={py(0.04)}
+              width={px(0.08) - px(-0.08)}
+              height={py(0) - py(0.04)}
+              rx={3}
+              fill="hsl(var(--muted-foreground) / 0.35)"
+            />
+          </>
+        )}
+        {mode === "top" && (
+          <circle cx={px(0)} cy={py(0)} r={Math.abs(px(0.08) - px(0))} fill="hsl(var(--muted-foreground) / 0.25)" />
+        )}
+
+        {/* arm segments — drawn thick with shadow underlayer */}
+        {projected.slice(0, -1).map((p, i) => {
+          const q = projected[i + 1];
+          return (
+            <g key={i}>
+              <line
+                x1={px(p[0])} y1={py(p[1])}
+                x2={px(q[0])} y2={py(q[1])}
+                stroke="hsl(var(--background))"
+                strokeOpacity={0.7}
+                strokeWidth={11}
+                strokeLinecap="round"
+              />
+              <line
+                x1={px(p[0])} y1={py(p[1])}
+                x2={px(q[0])} y2={py(q[1])}
+                stroke={SEGMENT_COLORS[i]}
+                strokeWidth={7}
+                strokeLinecap="round"
+                style={{ transition: "x1 120ms linear, y1 120ms linear, x2 120ms linear, y2 120ms linear" }}
+              />
+            </g>
+          );
+        })}
+
+        {/* joint pivots */}
+        {projected.slice(0, -1).map((p, i) => (
+          <g key={`j${i}`} style={{ transition: "transform 120ms linear" }}>
+            <circle
+              cx={px(p[0])} cy={py(p[1])}
+              r={i === 0 ? 8 : 5.5}
+              fill="hsl(var(--background))"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
+            />
+            {i > 0 && (
+              <circle cx={px(p[0])} cy={py(p[1])} r={2} fill="hsl(var(--primary))" />
+            )}
+          </g>
+        ))}
+
+        {/* TCP marker */}
+        <g>
+          <circle cx={px(tcp[0])} cy={py(tcp[1])} r={12} fill="hsl(var(--primary))" fillOpacity={0.18} />
+          <circle cx={px(tcp[0])} cy={py(tcp[1])} r={4.5} fill="hsl(var(--primary))" />
+          <text
+            x={px(tcp[0]) + 10}
+            y={py(tcp[1]) - 8}
+            fontSize={9}
+            fill="hsl(var(--primary))"
+            fontFamily="ui-monospace, monospace"
+          >
+            {JOINT_LABELS[JOINT_LABELS.length - 1]}
+          </text>
         </g>
       </svg>
     </div>

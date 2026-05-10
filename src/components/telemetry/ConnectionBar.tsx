@@ -96,6 +96,17 @@ export function ConnectionBar({
         >
           Setup →
         </Link>
+        <Button
+          type="button"
+          variant="secondary"
+          className="rounded-xl whitespace-nowrap"
+          onClick={() =>
+            window.open("http://localhost:6080/vnc.html?autoconnect=1&resize=scale", "_blank", "noopener")
+          }
+          title="Open URsim PolyScope in a new tab"
+        >
+          Open simulator
+        </Button>
       </div>
     </header>
   );

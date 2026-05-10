@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ConnState } from "@/lib/useRtdeSocket";
+import { BridgeStatus, ConnState } from "@/lib/useRtdeSocket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Link } from "@tanstack/react-router";
@@ -13,13 +13,14 @@ const STATE_META: Record<ConnState, { label: string; color: string; pulse: boole
 };
 
 export function ConnectionBar({
-  url, setUrl, state, hz, connect, disconnect,
+  url, setUrl, state, hz, error, bridgeStatus, connect, disconnect,
 }: {
   url: string;
   setUrl: (u: string) => void;
   state: ConnState;
   hz: number;
   error: string | null;
+  bridgeStatus: BridgeStatus | null;
   connect: () => void;
   disconnect: () => void;
 }) {
@@ -35,12 +36,23 @@ export function ConnectionBar({
         </div>
         <div>
           <h1 className="text-xl font-semibold tracking-tight leading-none">UR5 Console</h1>
-          <div className="flex items-center gap-1.5 mt-1.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
             <span className={`status-dot ${meta.color} ${meta.pulse ? "animate-pulse-dot" : ""}`} />
             <span className="text-xs text-muted-foreground">
               {meta.label}{live ? ` · ${hz} Hz` : ""}
             </span>
+            {bridgeStatus && live && (
+              <span className={bridgeStatus.robotConnected ? "text-xs text-success" : "text-xs text-warning"}>
+                Robot {bridgeStatus.robotConnected ? "connected" : bridgeStatus.robotState}
+              </span>
+            )}
+            {error && <span className="text-xs text-destructive">{error}</span>}
           </div>
+          {bridgeStatus?.robotError && live && !bridgeStatus.robotConnected && (
+            <p className="mt-1 max-w-[46rem] truncate text-xs text-destructive">
+              {bridgeStatus.robotError}
+            </p>
+          )}
         </div>
       </div>
 

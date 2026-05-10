@@ -1,0 +1,83 @@
+import { useEffect, useRef, useState, useCallback } from "react";
+
+export type Telemetry = {
+  t: number;
+  tcp_pose: number[];
+  tcp_speed: number[];
+  joint_q: number[];
+  joint_qd: number[];
+  joint_temp: number[];
+  joint_current: number[];
+  tcp_force: number[];
+  robot_mode: string;
+  safety_mode: string;
+  digital_in: number;
+  digital_out: number;
+  runtime_state: number;
+};
+
+export type ConnState = "idle" | "connecting" | "open" | "closed" | "error";
+
+const DEFAULT_URL =
+  typeof window !== "undefined"
+    ? localStorage.getItem("ur5_ws_url") || "ws://localhost:8765"
+    : "ws://localhost:8765";
+
+export function useRtdeSocket() {
+  const [url, setUrlState] = useState<string>(DEFAULT_URL);
+  const [state, setState] = useState<ConnState>("idle");
+  const [data, setData] = useState<Telemetry | null>(null);
+  const [hz, setHz] = useState(0);
+  const [error, setError] = useState<string | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
+  const tickRef = useRef<{ count: number; last: number }>({ count: 0, last: performance.now() });
+
+  const setUrl = useCallback((u: string) => {
+    setUrlState(u);
+    if (typeof window !== "undefined") localStorage.setItem("ur5_ws_url", u);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setState("closed");
+  }, []);
+
+  const connect = useCallback(() => {
+    disconnect();
+    setError(null);
+    setState("connecting");
+    try {
+      const ws = new WebSocket(url);
+      wsRef.current = ws;
+      ws.onopen = () => setState("open");
+      ws.onclose = () => setState("closed");
+      ws.onerror = () => {
+        setError("WebSocket error — is the bridge running?");
+        setState("error");
+      };
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data) as Telemetry;
+          setData(msg);
+          const now = performance.now();
+          tickRef.current.count++;
+          if (now - tickRef.current.last >= 1000) {
+            setHz(tickRef.current.count);
+            tickRef.current.count = 0;
+            tickRef.current.last = now;
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+    } catch (e) {
+      setError(String(e));
+      setState("error");
+    }
+  }, [url, disconnect]);
+
+  useEffect(() => () => wsRef.current?.close(), []);
+
+  return { url, setUrl, state, data, hz, error, connect, disconnect };
+}

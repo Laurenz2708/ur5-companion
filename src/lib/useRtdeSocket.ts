@@ -77,7 +77,16 @@ export function useRtdeSocket() {
     }
   }, [url, disconnect]);
 
+  const send = useCallback((cmd: object) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(cmd));
+      return true;
+    }
+    return false;
+  }, []);
+
   useEffect(() => () => wsRef.current?.close(), []);
 
-  return { url, setUrl, state, data, hz, error, connect, disconnect };
+  return { url, setUrl, state, data, hz, error, connect, disconnect, send };
 }

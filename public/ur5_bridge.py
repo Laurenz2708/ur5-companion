@@ -53,12 +53,19 @@ class RtdeBridge:
                 rtde = RTDEReceiveInterface(self.robot)
                 ctrl = None
                 if not self.readonly:
-                    print(f"[bridge] RTDE control -> {self.robot}")
-                    ctrl = RTDEControlInterface(self.robot)
+                    try:
+                        print(f"[bridge] RTDE control -> {self.robot}")
+                        ctrl = RTDEControlInterface(self.robot)
+                    except Exception as ce:
+                        # Control interface is often unavailable during a
+                        # protective/safeguard stop. Keep receive alive so
+                        # telemetry (and the UI animation) keep flowing.
+                        ctrl = None
+                        print(f"[bridge] control init failed (continuing read-only): {ce}")
+                        self.last_error = f"control unavailable: {ce}"
                 self.rtde = rtde
                 self.ctrl = ctrl
                 self.state = "connected"
-                self.last_error = None
                 print(f"[bridge] robot connected: {self.robot}")
                 return True
             except Exception as e:
@@ -171,7 +178,12 @@ async def handle_command(bridge, cmd, ws):
             return
         await ws.send(json.dumps({"type":"ack","ok":True,"cmd":op}))
     except Exception as e:
-        bridge.reset(str(e))
+        # A failed command should NOT tear down the receive stream — that
+        # froze the live preview after a safety stop. Just drop control;
+        # telemetry keeps flowing and reconnects when the operator clears
+        # the stop on the pendant.
+        bridge.ctrl = None
+        bridge.last_error = str(e)
         await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":str(e)}))
 
 async def main():

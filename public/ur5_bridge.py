@@ -26,6 +26,66 @@ MODES  = {-1:"NO_CONTROLLER",0:"DISCONNECTED",1:"CONFIRM_SAFETY",
 
 HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 
+# --- Workspace safety envelope (base frame, meters) -------------------------
+# UR5 nominal reach is ~0.85 m. We stay well inside that and forbid the TCP
+# from going below the table or behind the base mount.
+REACH_MAX = 0.82   # max distance from base origin to TCP
+REACH_MIN = 0.18   # keep tool away from the column / self-collision area
+Z_MIN     = 0.05   # never below the mounting surface
+Z_MAX     = 1.00
+# Joint soft limits (rad). Stay clear of the natural mechanical extremes.
+Q_LIMITS = [
+    (-3.05,  3.05),  # base
+    (-3.05,  0.05),  # shoulder — keep arm above the table
+    (-3.00,  3.00),  # elbow
+    (-3.05,  3.05),  # wrist 1
+    (-3.05,  3.05),  # wrist 2
+    (-6.28,  6.28),  # wrist 3
+]
+
+def _validate_pose(pose, ctrl=None, qnear=None):
+    """Return (ok, reason) for a target TCP pose in the base frame."""
+    try:
+        x, y, z = pose[0], pose[1], pose[2]
+    except Exception:
+        return False, "invalid pose"
+    r_xy = (x*x + y*y) ** 0.5
+    r    = (x*x + y*y + z*z) ** 0.5
+    if z < Z_MIN: return False, f"z={z:.3f} below floor ({Z_MIN})"
+    if z > Z_MAX: return False, f"z={z:.3f} above ceiling ({Z_MAX})"
+    if r > REACH_MAX: return False, f"out of reach ({r:.3f} m > {REACH_MAX})"
+    if r_xy < REACH_MIN and z < 0.30:
+        return False, "too close to base column (self-collision risk)"
+    # Ask the controller for an IK solution if available.
+    if ctrl is not None:
+        try:
+            has_ik = ctrl.getInverseKinematicsHasSolution(pose) if qnear is None \
+                     else ctrl.getInverseKinematicsHasSolution(pose, qnear)
+            if not has_ik:
+                return False, "no inverse-kinematics solution"
+        except Exception:
+            pass  # method may not exist on older ur_rtde versions
+        try:
+            if not ctrl.isPoseWithinSafetyLimits(pose):
+                return False, "pose outside safety limits"
+        except Exception:
+            pass
+    return True, ""
+
+def _validate_joints(q, ctrl=None):
+    if len(q) < 6:
+        return False, "invalid joint vector"
+    for i, (lo, hi) in enumerate(Q_LIMITS):
+        if not (lo <= q[i] <= hi):
+            return False, f"J{i+1}={q[i]:.3f} outside [{lo:.2f},{hi:.2f}]"
+    if ctrl is not None:
+        try:
+            if not ctrl.isJointsWithinSafetyLimits(q):
+                return False, "joints outside safety limits"
+        except Exception:
+            pass
+    return True, ""
+
 class RtdeBridge:
     def __init__(self, robot, readonly=False):
         self.robot = robot
@@ -185,11 +245,19 @@ async def handle_command(bridge, cmd, ws):
         elif op == "jog_joint":
             j = int(cmd["joint"]); d = float(cmd["delta"])
             q = list(rtde.getActualQ()); q[j] += d
+            ok, reason = _validate_joints(q, ctrl)
+            if not ok:
+                await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+                return
             ctrl.moveJ(q, float(cmd.get("speed", 0.5)), 0.5)
         elif op == "jog_tcp":
             axis = cmd["axis"]; d = float(cmd["delta"])
             idx = {"x":0,"y":1,"z":2,"rx":3,"ry":4,"rz":5}[axis]
             pose = list(rtde.getActualTCPPose()); pose[idx] += d
+            ok, reason = _validate_pose(pose, ctrl, list(rtde.getActualQ()))
+            if not ok:
+                await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+                return
             ctrl.moveL(pose, float(cmd.get("speed", 0.25)), 0.5)
         elif op == "speed_tcp":
             xd = list(cmd.get("xd", [0,0,0,0,0,0]))
@@ -199,6 +267,16 @@ async def handle_command(bridge, cmd, ws):
             if all(abs(v) < 1e-6 for v in xd):
                 ctrl.speedStop(accel)
             else:
+                # Look ahead ~0.4 s along the requested velocity and refuse
+                # if the predicted pose is unreachable / unsafe.
+                pose_now = list(rtde.getActualTCPPose())
+                target = [pose_now[i] + xd[i] * 0.4 for i in range(6)]
+                ok, reason = _validate_pose(target, ctrl, list(rtde.getActualQ()))
+                if not ok:
+                    try: ctrl.speedStop(accel)
+                    except Exception: pass
+                    await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+                    return
                 # 0.5s watchdog — if no new speed_tcp arrives the robot stops.
                 ctrl.speedL(xd, accel, 0.5)
         elif op == "set_do":

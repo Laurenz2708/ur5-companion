@@ -35,10 +35,26 @@ class RtdeBridge:
         self.state = "disconnected"
         self.last_error = "waiting for first connection attempt"
         self.retry_after = 0.0
+        self.ctrl_retry_after = 0.0
         self._lock = asyncio.Lock()
 
     async def ensure_connected(self):
         if self.rtde is not None:
+            # Receive is up — try to (re)build control on demand.
+            if (
+                self.ctrl is None
+                and not self.readonly
+                and time.time() >= self.ctrl_retry_after
+            ):
+                try:
+                    print(f"[bridge] RTDE control (retry) -> {self.robot}")
+                    self.ctrl = RTDEControlInterface(self.robot)
+                    self.last_error = None
+                except Exception as ce:
+                    self.ctrl = None
+                    self.ctrl_retry_after = time.time() + 1.5
+                    self.last_error = f"control unavailable: {ce}"
+                    print(f"[bridge] control retry failed: {ce}")
             return True
         now = time.time()
         if now < self.retry_after:
@@ -65,6 +81,8 @@ class RtdeBridge:
                         self.last_error = f"control unavailable: {ce}"
                 self.rtde = rtde
                 self.ctrl = ctrl
+                if ctrl is None and not self.readonly:
+                    self.ctrl_retry_after = time.time() + 1.5
                 self.state = "connected"
                 print(f"[bridge] robot connected: {self.robot}")
                 return True
@@ -83,6 +101,7 @@ class RtdeBridge:
         self.state = "disconnected"
         self.last_error = reason
         self.retry_after = time.time() + 1.0
+        self.ctrl_retry_after = 0.0
 
     def status_payload(self):
         return {

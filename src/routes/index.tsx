@@ -3,6 +3,7 @@ import { useRtdeSocket } from "@/lib/useRtdeSocket";
 import { ConnectionBar } from "@/components/telemetry/ConnectionBar";
 import { ControlPanel } from "@/components/telemetry/ControlPanel";
 import { GestureControl } from "@/components/telemetry/GestureControl";
+import { CommandStatus } from "@/components/telemetry/CommandStatus";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -143,9 +144,10 @@ function Dashboard() {
         </section>
       </div>
 
-      <section>
+      <div className="grid lg:grid-cols-2 gap-6">
         <GestureControl send={sock.send} enabled={live} />
-      </section>
+        <CommandStatus send={sock.send} enabled={live} lastAck={sock.lastAck} />
+      </div>
 
       <footer className="text-center text-xs text-muted-foreground py-2">
         Universal Robots UR5 · RTDE

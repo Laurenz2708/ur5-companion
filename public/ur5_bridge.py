@@ -28,10 +28,10 @@ HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 
 # --- Workspace safety envelope (base frame, meters) -------------------------
 # Tisch 1000 x 1000 mm, Roboter sitzt mittig am Aussenrand. +X zeigt ueber
-# den Tisch, Y ist quer. UR5 nominale Reichweite ~0.85 m -> Tisch-Ecken
-# (1.0 m vorn, 0.5 m seitlich = 1.118 m) sind ohnehin unerreichbar.
-# Wir validieren als Box (Tischflaeche) PLUS UR5-Reach-Sphere.
-REACH_MAX = 0.85   # UR5 nominale Reichweite (Sicherheitsgrenze)
+# den Tisch, Y ist quer. Das Viereck unten ist die Tischflaeche / erlaubte
+# Arbeitsbox. Keine zusaetzliche Kugel vom Sockel: die war zu streng, weil
+# der TCP mit Tool-Laenge/Z-Hoehe sonst faelschlich als "out of reach" galt.
+REACH_MAX = 1.30   # nur Plausibilitaets-Notbremse, nicht UR5-Nennreichweite
 REACH_MIN = 0.05   # Saeule / Eigenkollision
 X_MIN, X_MAX = -0.10, 1.00   # 10 cm hinter Sockel bis Tischende
 Y_MIN, Y_MAX = -0.50, 0.50   # halbe Tischbreite links/rechts
@@ -59,7 +59,7 @@ def _validate_pose(pose, ctrl=None, qnear=None):
     if y < Y_MIN or y > Y_MAX: return False, f"y={y:.3f} ausserhalb Tisch [{Y_MIN},{Y_MAX}]"
     if z < Z_MIN: return False, f"z={z:.3f} below floor ({Z_MIN})"
     if z > Z_MAX: return False, f"z={z:.3f} above ceiling ({Z_MAX})"
-    if r > REACH_MAX: return False, f"out of reach ({r:.3f} m > {REACH_MAX})"
+    if r > REACH_MAX: return False, f"workspace too far ({r:.3f} m > {REACH_MAX})"
     # Self-collision guard: tool must not enter the cylinder around the
     # column. Only enforced ABOVE the flange where the column actually is.
     if r_xy < REACH_MIN and z > 0.10:
@@ -245,6 +245,7 @@ async def handle_command(bridge, cmd, ws):
     try:
         ok, reason = _guard_current_state(rtde)
         if not ok and op != "stop":
+            print(f"[bridge] blocked {op}: {reason}")
             await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
             return
         if op == "stop":
@@ -256,6 +257,7 @@ async def handle_command(bridge, cmd, ws):
             q = list(rtde.getActualQ()); q[j] += d
             ok, reason = _validate_joints(q, ctrl)
             if not ok:
+                print(f"[bridge] blocked {op}: {reason}")
                 await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
                 return
             ctrl.moveJ(q, float(cmd.get("speed", 0.5)), 0.5)
@@ -265,6 +267,7 @@ async def handle_command(bridge, cmd, ws):
             pose = list(rtde.getActualTCPPose()); pose[idx] += d
             ok, reason = _validate_pose(pose, ctrl, list(rtde.getActualQ()))
             if not ok:
+                print(f"[bridge] blocked {op}: {reason}; target={pose[:3]}")
                 await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
                 return
             ctrl.moveL(pose, float(cmd.get("speed", 0.25)), 0.5)
@@ -284,6 +287,7 @@ async def handle_command(bridge, cmd, ws):
                 if not ok:
                     try: ctrl.speedStop(accel)
                     except Exception: pass
+                    print(f"[bridge] blocked {op}: {reason}; target={target[:3]}; xd={xd[:3]}")
                     await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
                     return
                 # 0.5s watchdog — if no new speed_tcp arrives the robot stops.

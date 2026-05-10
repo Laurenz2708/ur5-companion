@@ -338,6 +338,21 @@ async def handle_command(bridge, cmd, ws):
             pass
         bridge.last_error = str(e)
         await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":str(e)}))
+        # Auto-recover: if the controller reported an unreachable / IK / safety
+        # target, drive the robot back to HOME so the operator can continue.
+        msg = str(e).lower()
+        unreachable_hints = ("unreachable", "not reachable", "inverse kinem",
+                             "ik", "singular", "out of reach", "joint limit",
+                             "safety", "invalid target", "pose")
+        if op in ("jog_tcp", "jog_joint", "speed_tcp", "moveL", "moveJ") \
+                and any(h in msg for h in unreachable_hints):
+            try:
+                print(f"[bridge] auto-home after unreachable target ({op})")
+                ctrl.moveJ(HOME_Q, 0.5, 0.5)
+                await ws.send(json.dumps({"type":"ack","ok":True,"cmd":"home",
+                                          "info":"auto-home after unreachable target"}))
+            except Exception as he:
+                print(f"[bridge] auto-home failed: {he}")
 
 async def main():
     p = argparse.ArgumentParser()

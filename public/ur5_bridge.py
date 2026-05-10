@@ -27,14 +27,16 @@ MODES  = {-1:"NO_CONTROLLER",0:"DISCONNECTED",1:"CONFIRM_SAFETY",
 HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 
 # --- Workspace safety envelope (base frame, meters) -------------------------
-# UR5 nominal reach is ~0.85 m. We stay well inside that and forbid the TCP
-# from going below the table or behind the base mount.
-# Coordinates are in the UR base frame. z=0 is the mounting flange, NOT the
-# floor — the TCP is regularly below that (e.g. at the default home pose).
-REACH_MAX = 1.20   # max distance from base origin to TCP (UR5 ~0.85 m + tool offset)
-REACH_MIN = 0.05   # keep tool away from the column / self-collision area
-Z_MIN     = -0.30  # how far below the base flange the TCP may go (table)
-Z_MAX     = 1.00
+# Tisch 1000 x 1000 mm, Roboter sitzt mittig am Aussenrand. +X zeigt ueber
+# den Tisch, Y ist quer. UR5 nominale Reichweite ~0.85 m -> Tisch-Ecken
+# (1.0 m vorn, 0.5 m seitlich = 1.118 m) sind ohnehin unerreichbar.
+# Wir validieren als Box (Tischflaeche) PLUS UR5-Reach-Sphere.
+REACH_MAX = 0.85   # UR5 nominale Reichweite (Sicherheitsgrenze)
+REACH_MIN = 0.05   # Saeule / Eigenkollision
+X_MIN, X_MAX = -0.10, 1.00   # 10 cm hinter Sockel bis Tischende
+Y_MIN, Y_MAX = -0.50, 0.50   # halbe Tischbreite links/rechts
+Z_MIN     = -0.30  # bis zur Tischplatte
+Z_MAX     =  1.00  # voller Hub nach oben
 # Joint soft limits (rad). Stay clear of the natural mechanical extremes.
 Q_LIMITS = [
     (-6.28,  6.28),  # base
@@ -53,6 +55,8 @@ def _validate_pose(pose, ctrl=None, qnear=None):
         return False, "invalid pose"
     r_xy = (x*x + y*y) ** 0.5
     r    = (x*x + y*y + z*z) ** 0.5
+    if x < X_MIN or x > X_MAX: return False, f"x={x:.3f} ausserhalb Tisch [{X_MIN},{X_MAX}]"
+    if y < Y_MIN or y > Y_MAX: return False, f"y={y:.3f} ausserhalb Tisch [{Y_MIN},{Y_MAX}]"
     if z < Z_MIN: return False, f"z={z:.3f} below floor ({Z_MIN})"
     if z > Z_MAX: return False, f"z={z:.3f} above ceiling ({Z_MAX})"
     if r > REACH_MAX: return False, f"out of reach ({r:.3f} m > {REACH_MAX})"

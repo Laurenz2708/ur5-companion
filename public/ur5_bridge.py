@@ -37,11 +37,11 @@ Z_MIN     = -0.30  # how far below the base flange the TCP may go (table)
 Z_MAX     = 1.00
 # Joint soft limits (rad). Stay clear of the natural mechanical extremes.
 Q_LIMITS = [
-    (-3.05,  3.05),  # base
-    (-3.05,  0.05),  # shoulder — keep arm above the table
-    (-3.00,  3.00),  # elbow
-    (-3.05,  3.05),  # wrist 1
-    (-3.05,  3.05),  # wrist 2
+    (-6.28,  6.28),  # base
+    (-6.28,  6.28),  # shoulder
+    (-3.14,  3.14),  # elbow
+    (-6.28,  6.28),  # wrist 1
+    (-6.28,  6.28),  # wrist 2
     (-6.28,  6.28),  # wrist 3
 ]
 

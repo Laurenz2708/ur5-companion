@@ -26,32 +26,107 @@ MODES  = {-1:"NO_CONTROLLER",0:"DISCONNECTED",1:"CONFIRM_SAFETY",
 
 HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 
-async def telemetry_loop(rtde, ws, hz):
+class RtdeBridge:
+    def __init__(self, robot, readonly=False):
+        self.robot = robot
+        self.readonly = readonly
+        self.rtde = None
+        self.ctrl = None
+        self.state = "disconnected"
+        self.last_error = "waiting for first connection attempt"
+        self.retry_after = 0.0
+        self._lock = asyncio.Lock()
+
+    async def ensure_connected(self):
+        if self.rtde is not None:
+            return True
+        now = time.time()
+        if now < self.retry_after:
+            return False
+        async with self._lock:
+            if self.rtde is not None:
+                return True
+            self.state = "connecting"
+            self.last_error = None
+            try:
+                print(f"[bridge] RTDE receive -> {self.robot}")
+                rtde = RTDEReceiveInterface(self.robot)
+                ctrl = None
+                if not self.readonly:
+                    print(f"[bridge] RTDE control -> {self.robot}")
+                    ctrl = RTDEControlInterface(self.robot)
+                self.rtde = rtde
+                self.ctrl = ctrl
+                self.state = "connected"
+                self.last_error = None
+                print(f"[bridge] robot connected: {self.robot}")
+                return True
+            except Exception as e:
+                self.rtde = None
+                self.ctrl = None
+                self.state = "disconnected"
+                self.last_error = str(e)
+                self.retry_after = time.time() + 2.0
+                print(f"[bridge] robot connection failed: {e}")
+                return False
+
+    def reset(self, reason):
+        self.rtde = None
+        self.ctrl = None
+        self.state = "disconnected"
+        self.last_error = reason
+        self.retry_after = time.time() + 1.0
+
+    def status_payload(self):
+        return {
+            "type": "status",
+            "robot_connected": self.rtde is not None,
+            "robot_host": self.robot,
+            "robot_state": self.state,
+            "robot_error": self.last_error,
+            "readonly": self.readonly,
+            "control_enabled": self.ctrl is not None,
+            "t": time.time(),
+        }
+
+async def telemetry_loop(bridge, ws, hz):
     interval = 1.0 / hz
     while True:
         try:
-            payload = {
-                "type": "telemetry",
-                "t": time.time(),
-                "tcp_pose":     rtde.getActualTCPPose(),
-                "tcp_speed":    rtde.getActualTCPSpeed(),
-                "joint_q":      rtde.getActualQ(),
-                "joint_qd":     rtde.getActualQd(),
-                "joint_temp":   rtde.getJointTemperatures(),
-                "joint_current":rtde.getActualCurrent(),
-                "tcp_force":    rtde.getActualTCPForce(),
-                "robot_mode":   MODES.get(rtde.getRobotMode(),"UNKNOWN"),
-                "safety_mode":  SAFETY.get(rtde.getSafetyMode(),"UNKNOWN"),
-                "digital_in":   rtde.getActualDigitalInputBits(),
-                "digital_out":  rtde.getActualDigitalOutputBits(),
-                "runtime_state":rtde.getRuntimeState(),
-            }
-            await ws.send(json.dumps(payload))
+            if not await bridge.ensure_connected():
+                await ws.send(json.dumps(bridge.status_payload()))
+                await asyncio.sleep(interval)
+                continue
+
+            rtde = bridge.rtde
+            try:
+                payload = {
+                    "type": "telemetry",
+                    "t": time.time(),
+                    "tcp_pose":     rtde.getActualTCPPose(),
+                    "tcp_speed":    rtde.getActualTCPSpeed(),
+                    "joint_q":      rtde.getActualQ(),
+                    "joint_qd":     rtde.getActualQd(),
+                    "joint_temp":   rtde.getJointTemperatures(),
+                    "joint_current":rtde.getActualCurrent(),
+                    "tcp_force":    rtde.getActualTCPForce(),
+                    "robot_mode":   MODES.get(rtde.getRobotMode(),"UNKNOWN"),
+                    "safety_mode":  SAFETY.get(rtde.getSafetyMode(),"UNKNOWN"),
+                    "digital_in":   rtde.getActualDigitalInputBits(),
+                    "digital_out":  rtde.getActualDigitalOutputBits(),
+                    "runtime_state":rtde.getRuntimeState(),
+                    "robot_connected": True,
+                    "robot_host": bridge.robot,
+                }
+                await ws.send(json.dumps(payload))
+            except Exception as e:
+                bridge.reset(str(e))
+                await ws.send(json.dumps(bridge.status_payload()))
             await asyncio.sleep(interval)
         except websockets.ConnectionClosed:
             return
 
-async def handle_command(ctrl, rtde, cmd, ws):
+async def handle_command(bridge, cmd, ws):
     """
     Supported commands:
       {"cmd":"stop"}
@@ -61,6 +136,20 @@ async def handle_command(ctrl, rtde, cmd, ws):
       {"cmd":"set_do", "pin":0..7, "value":true|false}
     """
     op = cmd.get("cmd")
+    if not await bridge.ensure_connected():
+        await ws.send(json.dumps({
+            "type": "ack",
+            "ok": False,
+            "cmd": op,
+            "error": f"robot not connected: {bridge.last_error}",
+        }))
+        return
+    if bridge.ctrl is None:
+        await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":"readonly mode"}))
+        return
+
+    ctrl = bridge.ctrl
+    rtde = bridge.rtde
     try:
         if op == "stop":
             ctrl.stopJ(2.0)
@@ -78,11 +167,12 @@ async def handle_command(ctrl, rtde, cmd, ws):
         elif op == "set_do":
             ctrl.setStandardDigitalOut(int(cmd["pin"]), bool(cmd["value"]))
         else:
-            await ws.send(json.dumps({"type":"ack","ok":False,"error":f"unknown cmd {op}"}))
+            await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"unknown cmd {op}"}))
             return
         await ws.send(json.dumps({"type":"ack","ok":True,"cmd":op}))
     except Exception as e:
-        await ws.send(json.dumps({"type":"ack","ok":False,"error":str(e)}))
+        bridge.reset(str(e))
+        await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":str(e)}))
 
 async def main():
     p = argparse.ArgumentParser()

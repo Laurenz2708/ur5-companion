@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useRtdeSocket } from "@/lib/useRtdeSocket";
 import { ConnectionBar } from "@/components/telemetry/ConnectionBar";
 import { ControlPanel } from "@/components/telemetry/ControlPanel";
+import { GestureControl } from "@/components/telemetry/GestureControl";
 
 export const Route = createFileRoute("/")({
   component: Dashboard,
@@ -141,6 +142,10 @@ function Dashboard() {
           <ControlPanel send={sock.send} enabled={live} />
         </section>
       </div>
+
+      <section>
+        <GestureControl send={sock.send} enabled={live} />
+      </section>
 
       <footer className="text-center text-xs text-muted-foreground py-2">
         Universal Robots UR5 · RTDE

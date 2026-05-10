@@ -31,8 +31,8 @@ HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 # from going below the table or behind the base mount.
 # Coordinates are in the UR base frame. z=0 is the mounting flange, NOT the
 # floor — the TCP is regularly below that (e.g. at the default home pose).
-REACH_MAX = 0.85   # max distance from base origin to TCP
-REACH_MIN = 0.13   # keep tool away from the column / self-collision area
+REACH_MAX = 1.20   # max distance from base origin to TCP (UR5 ~0.85 m + tool offset)
+REACH_MIN = 0.05   # keep tool away from the column / self-collision area
 Z_MIN     = -0.30  # how far below the base flange the TCP may go (table)
 Z_MAX     = 1.00
 # Joint soft limits (rad). Stay clear of the natural mechanical extremes.
@@ -58,7 +58,7 @@ def _validate_pose(pose, ctrl=None, qnear=None):
     if r > REACH_MAX: return False, f"out of reach ({r:.3f} m > {REACH_MAX})"
     # Self-collision guard: tool must not enter the cylinder around the
     # column. Only enforced ABOVE the flange where the column actually is.
-    if r_xy < REACH_MIN and z > 0.05:
+    if r_xy < REACH_MIN and z > 0.10:
         return False, "too close to base column (self-collision risk)"
     # Deliberately avoid active controller IK/safety calls here. On some UR/RTDE
     # versions those calls interfere with the active control script after a

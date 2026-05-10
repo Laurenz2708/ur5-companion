@@ -331,16 +331,11 @@ async def handle_command(bridge, cmd, ws):
             return
         await ws.send(json.dumps({"type":"ack","ok":True,"cmd":op}))
     except Exception as e:
-        # A failed command should NOT tear down the receive stream — that
-        # froze the live preview after a safety stop. Drop control and let
-        # ensure_connected() rebuild it on the next command attempt.
+        print(f"[bridge] command failed {op}: {e}; payload={cmd}")
         try:
             ctrl.speedStop(0.5)
         except Exception:
-            try: ctrl.stopScript()
-            except Exception: pass
-        bridge.ctrl = None
-        bridge.ctrl_retry_after = time.time() + 0.5
+            pass
         bridge.last_error = str(e)
         await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":str(e)}))
 

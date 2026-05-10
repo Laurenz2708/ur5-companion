@@ -60,20 +60,9 @@ def _validate_pose(pose, ctrl=None, qnear=None):
     # column. Only enforced ABOVE the flange where the column actually is.
     if r_xy < REACH_MIN and z > 0.05:
         return False, "too close to base column (self-collision risk)"
-    # Ask the controller for an IK solution if available.
-    if ctrl is not None:
-        try:
-            has_ik = ctrl.getInverseKinematicsHasSolution(pose) if qnear is None \
-                     else ctrl.getInverseKinematicsHasSolution(pose, qnear)
-            if not has_ik:
-                return False, "no inverse-kinematics solution"
-        except Exception:
-            pass  # method may not exist on older ur_rtde versions
-        try:
-            if not ctrl.isPoseWithinSafetyLimits(pose):
-                return False, "pose outside safety limits"
-        except Exception:
-            pass
+    # Deliberately avoid active controller IK/safety calls here. On some UR/RTDE
+    # versions those calls interfere with the active control script after a
+    # rejected command, which made all later hand commands look ignored.
     return True, ""
 
 def _validate_joints(q, ctrl=None):
@@ -82,12 +71,19 @@ def _validate_joints(q, ctrl=None):
     for i, (lo, hi) in enumerate(Q_LIMITS):
         if not (lo <= q[i] <= hi):
             return False, f"J{i+1}={q[i]:.3f} outside [{lo:.2f},{hi:.2f}]"
-    if ctrl is not None:
-        try:
-            if not ctrl.isJointsWithinSafetyLimits(q):
-                return False, "joints outside safety limits"
-        except Exception:
-            pass
+    return True, ""
+
+def _guard_current_state(rtde):
+    """Block commands unless the robot is actually ready to accept motion."""
+    try:
+        mode = rtde.getRobotMode()
+        safety = rtde.getSafetyMode()
+    except Exception:
+        return False, "robot state unavailable"
+    if mode != 7:
+        return False, f"robot not running ({MODES.get(mode, mode)})"
+    if safety not in (1, 2):
+        return False, f"safety stop active ({SAFETY.get(safety, safety)})"
     return True, ""
 
 class RtdeBridge:
@@ -242,6 +238,10 @@ async def handle_command(bridge, cmd, ws):
     ctrl = bridge.ctrl
     rtde = bridge.rtde
     try:
+        ok, reason = _guard_current_state(rtde)
+        if not ok and op != "stop":
+            await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":f"blocked: {reason}"}))
+            return
         if op == "stop":
             ctrl.stopJ(2.0)
         elif op == "home":
@@ -293,6 +293,11 @@ async def handle_command(bridge, cmd, ws):
         # A failed command should NOT tear down the receive stream — that
         # froze the live preview after a safety stop. Drop control and let
         # ensure_connected() rebuild it on the next command attempt.
+        try:
+            ctrl.speedStop(0.5)
+        except Exception:
+            try: ctrl.stopScript()
+            except Exception: pass
         bridge.ctrl = None
         bridge.ctrl_retry_after = time.time() + 0.5
         bridge.last_error = str(e)

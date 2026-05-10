@@ -5,15 +5,22 @@ import { Input } from "@/components/ui/input";
 import { Link } from "@tanstack/react-router";
 
 const STATE_META: Record<ConnState, { label: string; color: string; pulse: boolean }> = {
-  idle:       { label: "Idle",         color: "bg-muted-foreground", pulse: false },
-  connecting: { label: "Connecting",   color: "bg-warning",          pulse: true  },
-  open:       { label: "Connected",    color: "bg-success",          pulse: true  },
-  closed:     { label: "Disconnected", color: "bg-muted-foreground", pulse: false },
-  error:      { label: "Error",        color: "bg-destructive",      pulse: false },
+  idle: { label: "Idle", color: "bg-muted-foreground", pulse: false },
+  connecting: { label: "Connecting", color: "bg-warning", pulse: true },
+  open: { label: "Connected", color: "bg-success", pulse: true },
+  closed: { label: "Disconnected", color: "bg-muted-foreground", pulse: false },
+  error: { label: "Error", color: "bg-destructive", pulse: false },
 };
 
 export function ConnectionBar({
-  url, setUrl, state, hz, error, bridgeStatus, connect, disconnect,
+  url,
+  setUrl,
+  state,
+  hz,
+  error,
+  bridgeStatus,
+  connect,
+  disconnect,
 }: {
   url: string;
   setUrl: (u: string) => void;
@@ -39,10 +46,15 @@ export function ConnectionBar({
           <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5">
             <span className={`status-dot ${meta.color} ${meta.pulse ? "animate-pulse-dot" : ""}`} />
             <span className="text-xs text-muted-foreground">
-              {meta.label}{live ? ` · ${hz} Hz` : ""}
+              {meta.label}
+              {live ? ` · ${hz} Hz` : ""}
             </span>
             {bridgeStatus && live && (
-              <span className={bridgeStatus.robotConnected ? "text-xs text-success" : "text-xs text-warning"}>
+              <span
+                className={
+                  bridgeStatus.robotConnected ? "text-xs text-success" : "text-xs text-warning"
+                }
+              >
                 Robot {bridgeStatus.robotConnected ? "connected" : bridgeStatus.robotState}
               </span>
             )}
@@ -65,7 +77,10 @@ export function ConnectionBar({
         />
         {!live ? (
           <Button
-            onClick={() => { setUrl(draft); setTimeout(connect, 0); }}
+            onClick={() => {
+              setUrl(draft);
+              setTimeout(connect, 0);
+            }}
             className="rounded-xl"
           >
             Connect

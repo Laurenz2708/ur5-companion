@@ -38,12 +38,8 @@ function Dashboard() {
   const d = sock.data;
   const live = sock.state === "open";
   const robotReady = live && (sock.bridgeStatus?.robotConnected ?? true);
-  const speedMag = d?.tcp_speed
-    ? Math.hypot(d.tcp_speed[0], d.tcp_speed[1], d.tcp_speed[2])
-    : 0;
-  const forceMag = d?.tcp_force
-    ? Math.hypot(d.tcp_force[0], d.tcp_force[1], d.tcp_force[2])
-    : 0;
+  const speedMag = d?.tcp_speed ? Math.hypot(d.tcp_speed[0], d.tcp_speed[1], d.tcp_speed[2]) : 0;
+  const forceMag = d?.tcp_force ? Math.hypot(d.tcp_force[0], d.tcp_force[1], d.tcp_force[2]) : 0;
 
   return (
     <main className="min-h-screen p-5 md:p-10 max-w-[1200px] mx-auto space-y-8">
@@ -99,9 +95,7 @@ function Dashboard() {
                         {isRot ? "rad" : "m"}
                       </span>
                     </div>
-                    <div className="font-mono text-lg tabular-nums mt-1.5">
-                      {fmt(v, 3)}
-                    </div>
+                    <div className="font-mono text-lg tabular-nums mt-1.5">{fmt(v, 3)}</div>
                   </div>
                 );
               })}
@@ -120,9 +114,7 @@ function Dashboard() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-muted-foreground w-6">{name}</span>
-                        <span className="text-sm font-mono tabular-nums">
-                          {fmt(deg, 1)}°
-                        </span>
+                        <span className="text-sm font-mono tabular-nums">{fmt(deg, 1)}°</span>
                       </div>
                       <span className="text-[11px] font-mono text-muted-foreground tabular-nums">
                         {fmt(d?.joint_qd?.[i], 3)} rad/s

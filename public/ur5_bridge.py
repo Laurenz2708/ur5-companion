@@ -226,8 +226,27 @@ async def handle_command(bridge, cmd, ws):
       {"cmd":"jog_tcp",   "axis":"x|y|z|rx|ry|rz", "delta":<m or rad>, "speed":0.25}
       {"cmd":"speed_tcp", "xd":[vx,vy,vz,wx,wy,wz], "accel":0.5}
       {"cmd":"set_do", "pin":0..7, "value":true|false}
+      {"cmd":"git_pull"}
     """
     op = cmd.get("cmd")
+    if op == "git_pull":
+        import subprocess, os
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        try:
+            out = subprocess.run(
+                ["git", "-C", repo, "pull", "--ff-only"],
+                capture_output=True, text=True, timeout=30,
+            )
+            msg = (out.stdout + out.stderr).strip()
+            print(f"[bridge] git pull: {msg}")
+            await ws.send(json.dumps({
+                "type": "ack", "ok": out.returncode == 0, "cmd": op,
+                "error": None if out.returncode == 0 else msg,
+                "output": msg,
+            }))
+        except Exception as e:
+            await ws.send(json.dumps({"type":"ack","ok":False,"cmd":op,"error":str(e)}))
+        return
     if not await bridge.ensure_connected():
         await ws.send(json.dumps({
             "type": "ack",

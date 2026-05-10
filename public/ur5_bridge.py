@@ -26,6 +26,11 @@ MODES  = {-1:"NO_CONTROLLER",0:"DISCONNECTED",1:"CONFIRM_SAFETY",
 
 HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 
+# TEMP DEBUG: bypass all bridge-side motion constraints so hand/speed commands
+# reach the UR controller directly. The UR controller's own safety system still
+# decides whether motion is accepted.
+BYPASS_MOTION_CONSTRAINTS = True
+
 # --- Workspace safety envelope (base frame, meters) -------------------------
 # Tisch 1000 x 1000 mm, Roboter sitzt mittig am Aussenrand. +X zeigt ueber
 # den Tisch, Y ist quer. Das Viereck unten ist die Tischflaeche / erlaubte
@@ -49,6 +54,8 @@ Q_LIMITS = [
 
 def _validate_pose(pose, ctrl=None, qnear=None):
     """Return (ok, reason) for a target TCP pose in the base frame."""
+    if BYPASS_MOTION_CONSTRAINTS:
+        return True, "constraints bypassed"
     try:
         x, y, z = pose[0], pose[1], pose[2]
     except Exception:
@@ -70,6 +77,8 @@ def _validate_pose(pose, ctrl=None, qnear=None):
     return True, ""
 
 def _validate_joints(q, ctrl=None):
+    if BYPASS_MOTION_CONSTRAINTS:
+        return True, "constraints bypassed"
     if len(q) < 6:
         return False, "invalid joint vector"
     for i, (lo, hi) in enumerate(Q_LIMITS):
@@ -79,6 +88,8 @@ def _validate_joints(q, ctrl=None):
 
 def _guard_current_state(rtde):
     """Block commands unless the robot is actually ready to accept motion."""
+    if BYPASS_MOTION_CONSTRAINTS:
+        return True, "constraints bypassed"
     try:
         mode = rtde.getRobotMode()
         safety = rtde.getSafetyMode()
@@ -297,6 +308,8 @@ async def handle_command(bridge, cmd, ws):
             accel = float(cmd.get("accel", 0.5))
             if all(abs(v) < 1e-6 for v in xd):
                 ctrl.speedStop(accel)
+            elif BYPASS_MOTION_CONSTRAINTS:
+                ctrl.speedL(xd, accel, 0.5)
             else:
                 # Look ahead ~0.4 s along the requested velocity and refuse
                 # if the predicted pose is unreachable / unsafe.

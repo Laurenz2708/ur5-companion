@@ -39,7 +39,7 @@ function Dashboard() {
   const sock = useRtdeSocket();
   const d = sock.data;
   const live = sock.state === "open";
-  const robotReady = live && (sock.bridgeStatus?.robotConnected ?? true);
+  const robotReady = live && (sock.bridgeStatus?.robotConnected ?? true) && (sock.bridgeStatus?.controlEnabled ?? false);
   const speedMag = d?.tcp_speed ? Math.hypot(d.tcp_speed[0], d.tcp_speed[1], d.tcp_speed[2]) : 0;
   const forceMag = d?.tcp_force ? Math.hypot(d.tcp_force[0], d.tcp_force[1], d.tcp_force[2]) : 0;
 

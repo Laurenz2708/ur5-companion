@@ -38,10 +38,10 @@ BYPASS_MOTION_CONSTRAINTS = True
 # der TCP mit Tool-Laenge/Z-Hoehe sonst faelschlich als "out of reach" galt.
 REACH_MAX = 1.30   # nur Plausibilitaets-Notbremse, nicht UR5-Nennreichweite
 REACH_MIN = 0.05   # Saeule / Eigenkollision
-X_MIN, X_MAX = -0.10, 1.00   # 10 cm hinter Sockel bis Tischende
-Y_MIN, Y_MAX = -0.50, 0.50   # halbe Tischbreite links/rechts
-Z_MIN     = -0.30  # bis zur Tischplatte
-Z_MAX     =  1.00  # voller Hub nach oben
+# Safety box (base frame, meters)
+X_MIN, X_MAX = 0.20, 0.55   # depth (outward from base)
+Y_MIN, Y_MAX = -0.25, 0.25  # lateral (left/right)
+Z_MIN, Z_MAX = 0.10, 0.45   # height
 # Joint soft limits (rad). Stay clear of the natural mechanical extremes.
 Q_LIMITS = [
     (-6.28,  6.28),  # base

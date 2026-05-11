@@ -29,7 +29,7 @@ HOME_Q = [0.0, -1.5708, 0.0, -1.5708, 0.0, 0.0]  # safe default home
 # TEMP DEBUG: bypass all bridge-side motion constraints so hand/speed commands
 # reach the UR controller directly. The UR controller's own safety system still
 # decides whether motion is accepted.
-BYPASS_MOTION_CONSTRAINTS = True
+BYPASS_MOTION_CONSTRAINTS = False
 
 # --- Workspace safety envelope (base frame, meters) -------------------------
 # Tisch 1000 x 1000 mm, Roboter sitzt mittig am Aussenrand. +X zeigt ueber

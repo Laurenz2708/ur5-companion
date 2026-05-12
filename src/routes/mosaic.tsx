@@ -12,7 +12,7 @@ export const Route = createFileRoute("/mosaic")({
       {
         name: "description",
         content:
-          "Bild hochladen, in 60×60 Steine (5 mm) auf 30×30 cm umwandeln und vom UR5 Roboterarm legen lassen.",
+          "Bild hochladen, in 30×30 Steine (10 mm) auf 30×30 cm umwandeln und vom UR5 Roboterarm legen lassen.",
       },
     ],
   }),
@@ -45,7 +45,7 @@ function MosaicPage() {
       <MosaicStudio send={sock.send} enabled={live} />
 
       <footer className="text-center text-xs text-muted-foreground py-2">
-        300 × 300 mm · 60 × 60 Steine à 5 mm · 20 Farben
+        300 × 300 mm · 30 × 30 Steine à 10 mm · 20 Farben
       </footer>
     </main>
   );

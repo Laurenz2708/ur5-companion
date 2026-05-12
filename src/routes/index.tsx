@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Link } from "@tanstack/react-router";
-import { Image as ImageIcon } from "lucide-react";
+import { Image as ImageIcon, Bot } from "lucide-react";
 import { useRtdeSocket } from "@/lib/useRtdeSocket";
 import { ConnectionBar } from "@/components/telemetry/ConnectionBar";
 import { ControlPanel } from "@/components/telemetry/ControlPanel";
@@ -50,6 +50,12 @@ function Dashboard() {
       <ConnectionBar {...sock} send={sock.send} />
 
       <div className="flex justify-end">
+        <Link
+          to="/assistant"
+          className="inline-flex items-center gap-1.5 rounded-xl bg-secondary px-3.5 py-2 text-xs font-medium text-foreground hover:bg-secondary/80 transition-colors mr-2"
+        >
+          <Bot className="h-3.5 w-3.5" /> KI-Assistent
+        </Link>
         <Link
           to="/mosaic"
           className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"

@@ -8,8 +8,8 @@
 //   - Palette:     20 fixed colors
 
 export const PLATE_MM = 300;
-export const STONE_MM = 5;
-export const GRID = PLATE_MM / STONE_MM; // 60
+export const STONE_MM = 10;
+export const GRID = PLATE_MM / STONE_MM; // 30
 
 export type Rgb = [number, number, number];
 

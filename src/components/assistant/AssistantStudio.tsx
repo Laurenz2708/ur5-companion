@@ -200,17 +200,17 @@ export function AssistantStudio({
       ctxLines.push(`Safety Mode: ${telemetry.safety_mode}.`);
 
     let assistantSoFar = "";
+    let started = false;
     const upsert = (chunk: string) => {
       assistantSoFar += chunk;
       setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant" && last.content !== userMsg.content && prev.length > 0 && prev[prev.length - 1] !== userMsg) {
-          // append to existing assistant streaming msg
-          if (last.role === "assistant" && prev[prev.length - 2] === userMsg) {
-            return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
-          }
+        if (!started) {
+          started = true;
+          return [...prev, { role: "assistant", content: assistantSoFar }];
         }
-        return [...prev, { role: "assistant", content: assistantSoFar }];
+        return prev.map((m, i) =>
+          i === prev.length - 1 ? { ...m, content: assistantSoFar } : m,
+        );
       });
     };
 

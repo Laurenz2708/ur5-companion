@@ -11,9 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as MosaicRouteImport } from './routes/mosaic'
-import { Route as AssistantRouteImport } from './routes/assistant'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as ApiAssistantRouteImport } from './routes/api/assistant'
 
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
@@ -25,58 +23,40 @@ const MosaicRoute = MosaicRouteImport.update({
   path: '/mosaic',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AssistantRoute = AssistantRouteImport.update({
-  id: '/assistant',
-  path: '/assistant',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiAssistantRoute = ApiAssistantRouteImport.update({
-  id: '/api/assistant',
-  path: '/api/assistant',
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/assistant': typeof AssistantRoute
   '/mosaic': typeof MosaicRoute
   '/setup': typeof SetupRoute
-  '/api/assistant': typeof ApiAssistantRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/assistant': typeof AssistantRoute
   '/mosaic': typeof MosaicRoute
   '/setup': typeof SetupRoute
-  '/api/assistant': typeof ApiAssistantRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/assistant': typeof AssistantRoute
   '/mosaic': typeof MosaicRoute
   '/setup': typeof SetupRoute
-  '/api/assistant': typeof ApiAssistantRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/assistant' | '/mosaic' | '/setup' | '/api/assistant'
+  fullPaths: '/' | '/mosaic' | '/setup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/assistant' | '/mosaic' | '/setup' | '/api/assistant'
-  id: '__root__' | '/' | '/assistant' | '/mosaic' | '/setup' | '/api/assistant'
+  to: '/' | '/mosaic' | '/setup'
+  id: '__root__' | '/' | '/mosaic' | '/setup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  AssistantRoute: typeof AssistantRoute
   MosaicRoute: typeof MosaicRoute
   SetupRoute: typeof SetupRoute
-  ApiAssistantRoute: typeof ApiAssistantRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -95,13 +75,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MosaicRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/assistant': {
-      id: '/assistant'
-      path: '/assistant'
-      fullPath: '/assistant'
-      preLoaderRoute: typeof AssistantRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/': {
       id: '/'
       path: '/'
@@ -109,22 +82,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/assistant': {
-      id: '/api/assistant'
-      path: '/api/assistant'
-      fullPath: '/api/assistant'
-      preLoaderRoute: typeof ApiAssistantRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  AssistantRoute: AssistantRoute,
   MosaicRoute: MosaicRoute,
   SetupRoute: SetupRoute,
-  ApiAssistantRoute: ApiAssistantRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

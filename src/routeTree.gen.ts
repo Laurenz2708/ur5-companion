@@ -10,17 +10,11 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SetupRouteImport } from './routes/setup'
-import { Route as MosaicRouteImport } from './routes/mosaic'
 import { Route as IndexRouteImport } from './routes/index'
 
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const MosaicRoute = MosaicRouteImport.update({
-  id: '/mosaic',
-  path: '/mosaic',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -31,31 +25,27 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/mosaic': typeof MosaicRoute
   '/setup': typeof SetupRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/mosaic': typeof MosaicRoute
   '/setup': typeof SetupRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/mosaic': typeof MosaicRoute
   '/setup': typeof SetupRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/mosaic' | '/setup'
+  fullPaths: '/' | '/setup'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/mosaic' | '/setup'
-  id: '__root__' | '/' | '/mosaic' | '/setup'
+  to: '/' | '/setup'
+  id: '__root__' | '/' | '/setup'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  MosaicRoute: typeof MosaicRoute
   SetupRoute: typeof SetupRoute
 }
 
@@ -66,13 +56,6 @@ declare module '@tanstack/react-router' {
       path: '/setup'
       fullPath: '/setup'
       preLoaderRoute: typeof SetupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/mosaic': {
-      id: '/mosaic'
-      path: '/mosaic'
-      fullPath: '/mosaic'
-      preLoaderRoute: typeof MosaicRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -87,7 +70,6 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  MosaicRoute: MosaicRoute,
   SetupRoute: SetupRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,6 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Link } from "@tanstack/react-router";
-import { Image as ImageIcon } from "lucide-react";
 import { useRtdeSocket } from "@/lib/useRtdeSocket";
 import { ConnectionBar } from "@/components/telemetry/ConnectionBar";
 import { ControlPanel } from "@/components/telemetry/ControlPanel";
@@ -48,15 +46,6 @@ function Dashboard() {
   return (
     <main className="min-h-screen p-5 md:p-10 max-w-[1200px] mx-auto space-y-8">
       <ConnectionBar {...sock} send={sock.send} />
-
-      <div className="flex justify-end">
-        <Link
-          to="/mosaic"
-          className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-        >
-          <ImageIcon className="h-3.5 w-3.5" /> Mosaik-Studio
-        </Link>
-      </div>
 
       {sock.error && (
         <div className="panel border-destructive/30 p-3 text-xs text-destructive text-center">
